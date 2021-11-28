@@ -14,12 +14,13 @@ public class Server : MonoBehaviour
     private NativeList<NetworkConnection> connections;
     private NativeList<NetworkConnection> room;
     private bool IsActive = false;
-    private const float KeepAliveTickRate = 20.0f;
+    private const float KeepAliveTickRate = 5.0f;
     private float LastKeepAlive;
-    private int playerCount = -1;
+    //private int playerCount = -1;
     public Action connectionDropped;
-    private NetUserName player0;
-    private NetUserName player1;
+    private NetUserName player0 = null;
+    private NetUserName player1 = null;
+    private Boolean roomactive = false;
 
     private void Awake() {
         Instance = this;
@@ -45,6 +46,7 @@ public class Server : MonoBehaviour
         connections = new NativeList<NetworkConnection>(2, Allocator.Persistent);
         room = new NativeList<NetworkConnection>(2, Allocator.Persistent);
         IsActive = true;
+     
 
     }
 
@@ -91,11 +93,48 @@ public class Server : MonoBehaviour
                 }
                 else if (cmd == NetworkEvent.Type.Disconnect) {
                     Debug.Log("Client disconnected from server");
-                    connections[i] = default(NetworkConnection);
-                    connectionDropped?.Invoke();
 
-                    Broadcast(new NetDisconnect());
-                    room.Clear();
+                    // CheckRoom1(i);
+                    if (room[0] == connections[i]) {
+                        SendToClient(room[1], new NetDisconnect());
+
+                        connections[i] = default(NetworkConnection);
+                        connectionDropped?.Invoke();
+                        for (int j = 0; j < connections.Length; j++) {
+                            if (room[1] == connections[j])
+                                connections[j] = default(NetworkConnection);
+                            connectionDropped?.Invoke();
+                        }
+                        room.Clear();
+                        player0 = null;
+                        player1 = null;
+                        break;
+                    }
+                    else if (room[1] == connections[i]) {
+                        Debug.Log("1");
+                        
+                        connections[i] = default(NetworkConnection);
+                        connectionDropped?.Invoke();
+                        for (int j = 0; j < connections.Length; j++) {
+                            Debug.Log("2");
+                            if (room[0] == connections[j])
+                                Debug.Log("3");
+                            SendToClient(room[0], new NetDisconnect());
+                            connections[j] = default(NetworkConnection);
+                            connectionDropped?.Invoke();
+                        }
+                        room.Clear();
+                        player0 = null;
+                        player1 = null;
+                        Debug.Log("4");
+                        roomactive = false;
+                        break;
+                    }
+
+
+
+                    //Broadcast(new NetDisconnect());
+
                     //ShutDown();
                     break;
                 }
@@ -135,6 +174,36 @@ public class Server : MonoBehaviour
         }
     }
 
+    private void CheckRoom1(int index) {
+        if (room[0] == connections[index]) {
+            SendToClient(room[1], new NetDisconnect());
+           
+            connections[index] = default(NetworkConnection);
+            connectionDropped?.Invoke();
+            for (int i = 0; i < connections.Length; i++) {
+                if(room[1] == connections[i])
+                connections[i] = default(NetworkConnection);
+                connectionDropped?.Invoke();
+            }
+            room.Clear();
+            player0 =null;
+            player1 = null;
+        }
+        else if (room[1] == connections[index]) {
+            SendToClient(room[0], new NetDisconnect());
+            connections[index] = default(NetworkConnection);
+            connectionDropped?.Invoke();
+            for (int i = 0; i < connections.Length; i++) {
+                if (room[1] == connections[i])
+                    connections[i] = default(NetworkConnection);
+                    connectionDropped?.Invoke();
+            }
+            room.Clear();
+            player0 = null;
+            player1 = null;
+        }
+    }
+
     private void OnMakeMoveServer(NetMessage msg, NetworkConnection cnn) {
         NetMakeMove mm = msg as NetMakeMove;
 
@@ -143,8 +212,18 @@ public class Server : MonoBehaviour
 
     private void OnWelcomeServer(NetMessage msg, NetworkConnection cnn) {
         NetWelcome nw = msg as NetWelcome;
-        room.Add(cnn);
-        nw.AssignedTeam = ++playerCount;
+      //  playerCount++;
+        if (player0 == null) {
+            room.Add(cnn);
+            nw.AssignedTeam = 0;
+        }
+        else if (player1 == null) {
+            room.Add(cnn);
+            nw.AssignedTeam = 1;
+        }
+
+        //room.Add(cnn);
+        //nw.AssignedTeam = ++playerCount;
         SendToClient(cnn, nw);
 
     }
@@ -159,17 +238,19 @@ public class Server : MonoBehaviour
         Debug.Log(un.PlayerName);
 
 
-        if (playerCount == 0) {
+        if (player0 == null) {
             this.player0 = un;
             Debug.Log($"{player0.PlayerName} has connected");
+          
         }
-        if (playerCount == 1) {
+        else if (player1 == null) {
             this.player1 = un;
             Debug.Log($"{player1.PlayerName} has connected");
+           
         }
 
 
-        if (playerCount == 1) {
+        if (player0 != null && player1 != null && !roomactive) {
             if (room[0] != null && room[1] != null) {
                 Debug.Log($"{player1.PlayerName} and {player0.PlayerName} are in a room");
                 SendToClient(room[1], player0);
@@ -177,6 +258,7 @@ public class Server : MonoBehaviour
                 NetStartGame ng = new NetStartGame();
                 SendToClient(room[0], ng);
                 SendToClient(room[1], ng);
+                roomactive = true;
             }
         }
     }
