@@ -14,12 +14,15 @@ public class Server : MonoBehaviour
     private NativeList<NetworkConnection> connections;
     private NativeList<NetworkConnection> room;
     private bool IsActive = false;
-    private const float KeepAliveTickRate = 5.0f;
+    private const float KeepAliveTickRate = 10.0f;
     private float LastKeepAlive;
     //private int playerCount = -1;
     public Action connectionDropped;
     private NetUserName player0 = null;
     private NetUserName player1 = null;
+    private bool player0Slot = false;
+    private bool player1Slot = false;
+
     private Boolean roomactive = false;
 
     private void Awake() {
@@ -94,45 +97,8 @@ public class Server : MonoBehaviour
                 else if (cmd == NetworkEvent.Type.Disconnect) {
                     Debug.Log("Client disconnected from server");
 
-                    // CheckRoom1(i);
-                    if (room[0] == connections[i]) {
-                        SendToClient(room[1], new NetDisconnect());
-
-                        connections[i] = default(NetworkConnection);
-                        connectionDropped?.Invoke();
-                        for (int j = 0; j < connections.Length; j++) {
-                            if (room[1] == connections[j])
-                                connections[j] = default(NetworkConnection);
-                            connectionDropped?.Invoke();
-                        }
-                        room.Clear();
-                        player0 = null;
-                        player1 = null;
-                        break;
-                    }
-                    else if (room[1] == connections[i]) {
-                        Debug.Log("1");
-                        
-                        connections[i] = default(NetworkConnection);
-                        connectionDropped?.Invoke();
-                        for (int j = 0; j < connections.Length; j++) {
-                            Debug.Log("2");
-                            if (room[0] == connections[j])
-                                Debug.Log("3");
-                            SendToClient(room[0], new NetDisconnect());
-                            connections[j] = default(NetworkConnection);
-                            connectionDropped?.Invoke();
-                        }
-                        room.Clear();
-                        player0 = null;
-                        player1 = null;
-                        Debug.Log("4");
-                        roomactive = false;
-                        break;
-                    }
-
-
-
+                     CheckRoom1(i);
+                    
                     //Broadcast(new NetDisconnect());
 
                     //ShutDown();
@@ -174,33 +140,40 @@ public class Server : MonoBehaviour
         }
     }
 
-    private void CheckRoom1(int index) {
-        if (room[0] == connections[index]) {
-            SendToClient(room[1], new NetDisconnect());
-           
-            connections[index] = default(NetworkConnection);
+    private void CheckRoom1(int i) {
+        if (room[0] == connections[i]) {
+            connections[i] = default(NetworkConnection);
             connectionDropped?.Invoke();
-            for (int i = 0; i < connections.Length; i++) {
-                if(room[1] == connections[i])
-                connections[i] = default(NetworkConnection);
-                connectionDropped?.Invoke();
-            }
-            room.Clear();
-            player0 =null;
-            player1 = null;
-        }
-        else if (room[1] == connections[index]) {
-            SendToClient(room[0], new NetDisconnect());
-            connections[index] = default(NetworkConnection);
-            connectionDropped?.Invoke();
-            for (int i = 0; i < connections.Length; i++) {
-                if (room[1] == connections[i])
-                    connections[i] = default(NetworkConnection);
+            for (int j = 0; j < connections.Length; j++) {
+                if (room[1] == connections[j]) {
+                    SendToClient(room[1], new NetDisconnect());
+                    connections[j] = default(NetworkConnection);
                     connectionDropped?.Invoke();
+                }
             }
             room.Clear();
             player0 = null;
             player1 = null;
+            player0Slot = false;
+            player1Slot = false;
+            roomactive = false;
+        }
+        else if (room[1] == connections[i]) {
+            connections[i] = default(NetworkConnection);
+            connectionDropped?.Invoke();
+            for (int j = 0; j < connections.Length; j++) {
+                if (room[0] == connections[j]) {
+                    SendToClient(room[0], new NetDisconnect());
+                    connections[j] = default(NetworkConnection);
+                    connectionDropped?.Invoke();
+                }
+            }
+            room.Clear();
+            player0 = null;
+            player1 = null;
+            player0Slot = false;
+            player1Slot = false;
+            roomactive = false;
         }
     }
 
@@ -213,13 +186,15 @@ public class Server : MonoBehaviour
     private void OnWelcomeServer(NetMessage msg, NetworkConnection cnn) {
         NetWelcome nw = msg as NetWelcome;
       //  playerCount++;
-        if (player0 == null) {
+        if (player0 == null && !player0Slot) {
             room.Add(cnn);
             nw.AssignedTeam = 0;
+            player0Slot = true;
         }
-        else if (player1 == null) {
+        else if (player1 == null && !player1Slot) {
             room.Add(cnn);
             nw.AssignedTeam = 1;
+            player1Slot = true;
         }
 
         //room.Add(cnn);
@@ -238,15 +213,14 @@ public class Server : MonoBehaviour
         Debug.Log(un.PlayerName);
 
 
-        if (player0 == null) {
+        if (player0 == null && player0Slot) {
             this.player0 = un;
-            Debug.Log($"{player0.PlayerName} has connected");
-          
+            Debug.Log($"{player0.PlayerName} has connected"); 
         }
-        else if (player1 == null) {
+        else if (player1 == null && player1Slot) {
             this.player1 = un;
             Debug.Log($"{player1.PlayerName} has connected");
-           
+  
         }
 
 
